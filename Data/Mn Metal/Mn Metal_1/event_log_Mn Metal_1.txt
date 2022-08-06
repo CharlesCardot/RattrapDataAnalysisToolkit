@@ -1,0 +1,4 @@
+7/22/2022 4:30:52 PM  Initialize data log for sample: Mn Metal  batch: 1
+7/22/2022 4:30:52 PM  data initialization directories.vi
+7/22/2022 4:30:52 PM  Made sample dir sample: Mn Metal
+7/22/2022 4:30:52 PM  Made batch dir sample: Mn Metal batch number: 1

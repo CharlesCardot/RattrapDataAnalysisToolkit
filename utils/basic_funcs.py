@@ -5,14 +5,21 @@ import pandas as pd
 from scipy import integrate
 from scipy import optimize
 
-def get_spectra(run_path,runs,rows_to_skip):
+
+def get_spectra(run_path,runs):
     ''' 
-    Read in output from the rattrap spectrometer in Seidler lab,
-    and sum multiple runs together if there is more than 1.
+    Read in an 'alldata' file, sum together runs (either a 
+    list of runs or 'all'), and return a numpy array of the form
+    [[x_values], [y_values]].
     '''
 
-    data_files = [f.path for f in os.scandir(run_path) if "alldata" in str(f.path)]
-    data = [pd.read_csv(x,delim_whitespace=True,skiprows=rows_to_skip) for x in data_files]
+    alldata_files = [f.path for f in os.scandir(run_path) if "alldata" in str(f.path)]
+
+    for key,line in enumerate(open(alldata_files[0]).readlines()):
+        if line.startswith("***"):
+            rows_to_skip = key + 1
+
+    data = [pd.read_csv(x,delim_whitespace=True,skiprows=rows_to_skip) for x in alldata_files]
     x = data[0]["Energy_(eV)"]
 
     if isinstance(runs,str) and runs == "all":
@@ -30,41 +37,73 @@ def get_spectra(run_path,runs,rows_to_skip):
     else:
         raise ValueError("runs must be either string 'all' or list (ex:[0,1,2]) denoting the which specific runs you wish to sum together")
 
-def background_subtract(arr,start_energy):
+def find_index_of_closest_value(array, val):
+    dif = (array - val)**2
+    return np.argmin(dif)
+
+def subtract_constant_background(arr, roi):
     ''' 
-    Subtract the background from the x-y spectra using 
-    the intensity of the at the farthest tip of the tail.
+    Subtract a constant background from the x-y spectra using 
+    the intensity within the region of interest (ROI).
     '''
 
-    def find_index_of_closest_value(array, val):
-        dif = (array - val)**2
-        return np.argmin(dif)
+    start_energy, end_energy = roi
 
     def loss(y, b):
-        return np.sum((y - b)**2/100)
-
-    # background subtract from tail
+        fit_function = b # constant background
+        return np.sum((y - fit_function)**2 / 100) 
+  
     start_index = find_index_of_closest_value(arr[0], start_energy)
-    # take the last values of the spectrum starting at the specified energy
-    y = arr[1][start_index:-1] 
+    end_index = find_index_of_closest_value(arr[0], end_energy)
+    y = arr[1][start_index:end_index] 
 
-    starting_param_vals = np.array([0.0])  #constant background
+    starting_param_vals = [0]  # starting guess of zero background
 
     optimized_background = optimize.minimize(loss, x0=starting_param_vals, 
         args=(y), method='BFGS')
-    print(optimized_background['message'])
     background = optimized_background['x']
 
     return np.asarray([arr[0],arr[1]-background])
 
+def subtract_linear_background(arr, left_roi, right_roi):
+    '''
+    Subtract linear background from the x-y spectra. Find 
+    average x and y values within the two ROIs and use the 
+    line connecting them.
+    '''
+
+    left_start_energy, left_end_energy = left_roi
+    right_start_energy, right_end_energy = right_roi
+    
+    left_chunk = plottrim(arr, left_start_energy, left_end_energy)
+    right_chunk = plottrim(arr, right_start_energy, right_end_energy)
+
+    left_avg = np.average(left_chunk,axis=1) # [x_{1,avg}, y_{1,avg}]
+    right_avg = np.average(right_chunk,axis=1) # [x_{2,avg}, y_{2,avg}]
+
+    m = (right_avg[1] - left_avg[1]) / (right_avg[0] - left_avg[0])
+    b = left_avg[1] - m*left_avg[0]
+    linear_background = arr[0]*m + b
+
+    return np.asarray([arr[0],arr[1]-linear_background])
+
 def normalize(arr):
-    ''' Normalize the x-y spectra '''
+    ''' Normalize the x-y spectra using trapezoidal integration '''
 
     arr[1] = arr[1]/integrate.trapz(arr[1],arr[0])
     return arr
     
-def plottrim(arr,left,right,relative_position=0):
-    ''' Trim the x-y spectra to only have x-values between 'left' and 'right' '''
+def plottrim(arr, left, right, relative_position=0):
+    ''' 
+    Trim the x-y spectra to only have x-values between 'left' and 'right' 
+    Example:
+        > arr = [
+            [0, 1, 2, 3, 4, 5], # x_values
+            [10, 11, 12, 13, 14, 15] # y_values
+            ]
+        > plottrim(arr, left=2, right=5)
+        [[2, 3, 4, 5], [12, 13, 14, 15]]]
+    '''
 
     temp = [[],[]]
     for i in range(len(arr[0])):

@@ -1,0 +1,3 @@
+7/22/2022 5:42:30 PM  Initialize data log for sample: Mn(II)  batch: 2
+7/22/2022 5:42:30 PM  data initialization directories.vi
+7/22/2022 5:42:30 PM  Made batch dir sample: Mn(II) batch number: 2
