@@ -6,8 +6,60 @@ import pandas as pd
 from scipy import integrate
 from scipy import optimize
 
+def all_runs_to_df(run_path):
+    """
+    Used to create a pandas dataframe from
+    all the 'alldata' files in a directory.
+    """
 
-def get_spectra(run_path, runs):
+    alldata_files = [f.path for f in os.scandir(run_path)
+                     if "alldata" in str(f.path)]
+
+    for key, line in enumerate(open(alldata_files[0]).readlines()):
+        if line.startswith("***"):
+            rows_to_skip = key + 1
+
+    data = [pd.read_csv(x, delim_whitespace=True, skiprows=rows_to_skip)
+            for x in alldata_files]
+    return data
+
+def get_spectra_arr(run_path, runs):
+    """
+    Return spectra belonging to a given directory
+    in list format, where every entry is an individual 
+    spectra.
+
+    Read in an 'alldata' file, taking either a
+    list of runs or 'all', and returns a numpy array of the form
+    [[x_values, y_values], [x_values, y_values], [...], ...].
+
+    parameters:
+        run_path - local path/ directory to data files
+        runs - either 'all' or a list of run/scan numbers
+
+    returns:
+        array - [[x_values, y_values], [x_values, y_values], [...], ...]
+    """
+    data = all_runs_to_df(run_path=run_path)
+    x = data[0]["Energy_(eV)"]
+
+    if isinstance(runs, str) and runs == "all":
+        # Return all runs
+        spectra_arr = np.asarray([[x, d["cnts_per_live"]] for d in data])
+        return spectra_arr
+
+    elif isinstance(runs, list):
+        # Return the runs specified in the list 'runs'
+        spectra_arr = np.asarray([[x, d["cnts_per_live"]] for key, d
+                                      in enumerate(data) if key in runs])
+        return spectra_arr
+
+    else:
+        raise ValueError("runs must be either string 'all' or list " +
+                         "(ex:[0, 1, 2]) denoting the which specific " +
+                         "runs you wish to sum together")
+
+def get_spectra_summed(run_path, runs):
     """
     Return spectra belonging to a given directory.
 
@@ -22,15 +74,7 @@ def get_spectra(run_path, runs):
     returns:
         spectra - array in the form [energy, spectral sum of all batches]
     """
-    alldata_files = [f.path for f in os.scandir(run_path)
-                     if "alldata" in str(f.path)]
-
-    for key, line in enumerate(open(alldata_files[0]).readlines()):
-        if line.startswith("***"):
-            rows_to_skip = key + 1
-
-    data = [pd.read_csv(x, delim_whitespace=True, skiprows=rows_to_skip)
-            for x in alldata_files]
+    data = all_runs_to_df(run_path=run_path)
     x = data[0]["Energy_(eV)"]
 
     if isinstance(runs, str) and runs == "all":
