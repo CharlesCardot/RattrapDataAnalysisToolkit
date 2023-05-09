@@ -19,6 +19,13 @@ def all_runs_to_df(run_path):
         if line.startswith("***"):
             rows_to_skip = key + 1
 
+    # Sort based on run number
+    alldata_files = sorted(alldata_files, 
+                           key=lambda x: int(
+                           x.split("_")[-1].replace(".txt","")
+                           )
+                        )
+
     data = [pd.read_csv(x, delim_whitespace=True, skiprows=rows_to_skip)
             for x in alldata_files]
     return data
