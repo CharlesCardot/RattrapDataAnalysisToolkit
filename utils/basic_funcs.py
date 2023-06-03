@@ -239,3 +239,180 @@ def plottrim(arr, left, right, relative_position=0):
             temp[0].append(np.round(arr[0][i], 6))
             temp[1].append(np.round(arr[1][i], 6))
     return np.asarray(temp)
+
+def Voigt(x,A,cen,sigma,gamma):
+    # cen: center of the voigt distribution
+    # sigma: the standard deviation of the Gaussian
+    # gamma: the Half-width at half-maximum of the Lorentzian
+    return A*scipy.special.voigt_profile(x-cen,sigma,gamma)
+
+
+def peak_indices(arr, min_peak_seperation):
+    stepsize = np.mean(np.diff(arr[0]))
+    peak_index, properties = find_peaks(arr[1], height=0, distance=min_peak_seperation/stepsize)
+    peak1 = peak_index[np.argsort(properties["peak_heights"])[-1]] #Ka1 Peak
+    peak2 = peak_index[np.argsort(properties["peak_heights"])[-2]] #Ka2 Peak
+    return (peak1,peak2)
+
+
+def fit_Ka_with_voigts(arr, p0=None, num_voigts=2):
+    """
+    This function fits an arbitrary Kalpha spectrum with 
+    any number of voigts. The logic that's used it centered around
+    taking best guesses for traditional Kalpha spectra (two main peaks).
+    However, by specifying your own initial guesses and number of voits, it
+    can fit any arbitrary spectrum.
+
+    The p0 initial guess array is designed to allow for 
+    a wide variety of initial guess formats, hopefully reducing
+    the work on the user's end when trying to quickly extract a
+    fit with Voigts.
+
+    Paramters
+    ---------
+        arr : 2D numpy array 
+            has he form [energy, spectrum]
+        p0 : list, optional
+            [[voigt1_params], [voigt2_params], ...]
+
+            [voigt_params] can have the format 
+            [a, b, c, ...], 
+            [[a, amin, amax], [b, bmin, bmax], [c, cmin, cmax], ...],
+            or [[a, amin, amax], b, [c, cmin, cmax], ...]
+        num_voigts : int, optional
+            Number of voigts to use for the fit
+
+    Returns
+    -------
+        result : lmfit result
+            The result from calling model.fit()
+        voigts : list
+            [voigt1, voigt2, ...]
+        
+    """
+
+    if num_voigts <= 0:
+        raise ValueError("num_voigts must be equal to 1 or greater")
+
+
+    params = Parameters()
+    
+    minamp = 0 * np.max(arr[1])
+    maxamp = 1000 * np.max(arr[1])
+    peakpos = peak_indices(arr, min_peak_seperation = 4)
+
+    if p0: # Initial guesses for parameters are provided
+
+        if len(p0) < num_voigts:
+            print("Warning, length of initial guess list 'p0' is less than 'num_voigts'")
+            print("Default guess params may not be optiomal for the given spectrum")
+
+        if len(p0) > num_voigts:
+            msg = "length of initial guess list 'p0' is greater than 'num_voigts'." 
+            raise ValueError(msg)
+
+        v = 0
+        for voigt_params in p0:
+            for p, j in enumerate(voigt_params):
+                if len(p) == 1:
+
+                    shift = 2
+                    if j == 0:
+                        params.add("amp" + str(v),value=p,min=minamp,max=maxamp)
+                    elif j == 1:
+                        params.add("cen" + str(v+1),value=p,min=arr[0][peakpos[0]]-shift,max=arr[0][peakpos[0]]+shift)
+                    elif j == 2:
+                        params.add("sigma" + str(v+2),value=p,min=0,max=1000)
+                    elif j == 3:
+                        params.add("gamma" + str(v+3),value=p,min=0,max=1000)
+
+                elif len(p) == 3:
+
+                    if j == 0:
+                        params.add("amp" + str(v),value=p[0],min=p[1],max=p[2])
+                    elif j == 1:
+                        params.add("cen" + str(v+1),value=p[0],min=p[1],max=p[2])
+                    elif j == 2:
+                        params.add("sigma" + str(v+2),value=p[0],min=p[1],max=p[2])
+                    elif j == 3:
+                        params.add("gamma" + str(v+3),value=p[0],min=p[1],max=p[2])
+
+                else:
+                    msg = "p0 must have the format [[voigt1_params], [voigt2_params], ...]"
+                    msg += "\nwhere voigt_params must have the format [a, b, c, ...]"
+                    msg += "\nor [[a, amin, amax], [b, bmin, bmax], [c, cmin, cmax], ...]"
+                    msg += "\nor [[a, amin, amax], b, [c, cmin, cmax], ..."
+                    msg += "\nwhere a, b, and c are initial guesses."
+                    raise ValueError(msg)
+            v += 1
+
+
+    else: # No initial guesses for parameters
+
+        if num_voigts > 2:
+            print("Warning, fitting more than 2 voigts with no initial guesses",
+                "\nThis will be difficult to converge without " + 
+                "strong initial conditions")
+
+        if num_voigts == 1:
+
+            print("Warning, using only 1 Voigt is not sufficient when trying to fit Kalpha spectra")
+            shift=10
+            v = 1
+
+            params.add("amp0",value=arr[1][peakpos[0]],min=minamp,max=maxamp)
+            params.add("cen0",value=arr[0][peakpos[0]],min=arr[0][peakpos[0]]-shift,max=arr[0][peakpos[0]]+shift)
+            params.add("sigma0",value=1,min=0,max=1000)
+            params.add("gamma0",value=1,min=0,max=1000)
+
+        elif num_voigts >= 2:
+
+            shift = 3
+            v = 2
+
+            params.add("amp0",value=arr[1][peakpos[0]],min=minamp,max=maxamp)
+            params.add("amp1",value=arr[1][peakpos[1]],min=minamp,max=maxamp)
+            params.add("cen0",value=arr[0][peakpos[0]],min=arr[0][peakpos[0]]-shift,max=arr[0][peakpos[0]]+shift)
+            params.add("cen1",value=arr[0][peakpos[1]],min=arr[0][peakpos[1]]-shift,max=arr[0][peakpos[1]]+shift)
+            params.add("sigma0",value=1,min=0,max=1000)
+            params.add("sigma1",value=1,min=0,max=1000)
+            params.add("gamma0",value=1,min=0,max=1000)
+            params.add("gamma1",value=1,min=0,max=1000)
+
+
+    if v < num_voigts:
+        
+        new_voigts = num_voigts - v
+
+        centers = [params[x].value for x in params.keys() if "cen" in x]
+        centers = np.sort(np.asarray(centers))
+        largest_gap = max(centers[i+1] - centers[i] for i in range(len(centers) - 1))
+        new_centers = [centers[0] + largest_gap / (new_voigts + 1)]
+
+        for cen in new_centers:
+
+            shift = largest_gap
+            params.add("amp" + str(v),value=np.max(arr[1])/2,min=minamp,max=maxamp)
+            params.add("cen" + str(v),value=cen,min=cen-shift,max=cen+shift)
+            params.add("sigma" + str(v),value=1,min=0,max=1000)
+            params.add("gamma" + str(v),value=1,min=0,max=1000)
+            
+            v += 1
+
+    def voigtmodel(x, **kwargs):
+        spectra = np.zeros(len(arr[0]))
+        for i in range(num_voigts):
+            spectra += Voigt(x,A=kwargs["amp" + str(i)], cen=kwargs["cen" + str(i)],
+                             sigma=kwargs["sigma" + str(i)], gamma=kwargs["gamma" + str(i)])
+        return spectra
+
+    print(params)
+    result = Model(voigtmodel).fit(data=arr[1],x=arr[0],params=params)
+
+    voigts = []
+    for v in range(num_voigts):
+        voigt = Voigt(arr[0], A=result.params['amp' + str(v)].value, cen=result.params['cen' + str(v)].value, 
+                      sigma=result.params['sigma' + str(v)].value, gamma=result.params['gamma' + str(v)].value)
+        voigts.append(voigt)
+
+    return result, voigts
