@@ -291,8 +291,8 @@ def fit_Ka_with_voigts(arr, p0=None, num_voigts=2):
         
     """
 
-    if num_voigts <= 0:
-        raise ValueError("num_voigts must be equal to 1 or greater")
+    if num_voigts <= 1:
+        raise ValueError("num_voigts must be equal to 2 or greater")
 
 
     params = Parameters()
@@ -313,29 +313,43 @@ def fit_Ka_with_voigts(arr, p0=None, num_voigts=2):
 
         v = 0
         for voigt_params in p0:
-            for p, j in enumerate(voigt_params):
-                if len(p) == 1:
+            for j, p in enumerate(voigt_params):
+
+                if isinstance(p, int) or isinstance(p, float): # p has format [a]
 
                     shift = 2
                     if j == 0:
                         params.add("amp" + str(v),value=p,min=minamp,max=maxamp)
                     elif j == 1:
-                        params.add("cen" + str(v+1),value=p,min=arr[0][peakpos[0]]-shift,max=arr[0][peakpos[0]]+shift)
+                        params.add("cen" + str(v),value=p,min=arr[0][peakpos[0]]-shift,max=arr[0][peakpos[0]]+shift)
                     elif j == 2:
-                        params.add("sigma" + str(v+2),value=p,min=0,max=1000)
+                        params.add("sigma" + str(v),value=p,min=0,max=1000)
                     elif j == 3:
-                        params.add("gamma" + str(v+3),value=p,min=0,max=1000)
+                        params.add("gamma" + str(v),value=p,min=0,max=1000)
 
-                elif len(p) == 3:
+                elif isinstance(p, list) and len(p) == 3: # p has format [a, amin, amax]
 
                     if j == 0:
                         params.add("amp" + str(v),value=p[0],min=p[1],max=p[2])
                     elif j == 1:
-                        params.add("cen" + str(v+1),value=p[0],min=p[1],max=p[2])
+                        params.add("cen" + str(v),value=p[0],min=p[1],max=p[2])
                     elif j == 2:
-                        params.add("sigma" + str(v+2),value=p[0],min=p[1],max=p[2])
+                        params.add("sigma" + str(v),value=p[0],min=p[1],max=p[2])
                     elif j == 3:
-                        params.add("gamma" + str(v+3),value=p[0],min=p[1],max=p[2])
+                        params.add("gamma" + str(v),value=p[0],min=p[1],max=p[2])
+                
+                elif not(p): # p is None
+
+                    shift = np.abs(arr[0][peakpos[1]] - arr[0][peakpos[0]]) * 1.5
+                    if j == 0:
+                        params.add("amp" + str(v),value=np.max(arr[1])/2,min=minamp,max=maxamp)
+                    elif j == 1:
+                        middle = (arr[0][peakpos[1]] - arr[0][peakpos[0]])/2
+                        params.add("cen" + str(v),value=middle,min=middle-shift,max=middle+shift)
+                    elif j == 2:
+                        params.add("sigma" + str(v),value=1,min=0,max=1000)
+                    elif j == 3:
+                        params.add("gamma" + str(v),value=1,min=0,max=1000)
 
                 else:
                     msg = "p0 must have the format [[voigt1_params], [voigt2_params], ...]"
@@ -354,30 +368,17 @@ def fit_Ka_with_voigts(arr, p0=None, num_voigts=2):
                 "\nThis will be difficult to converge without " + 
                 "strong initial conditions")
 
-        if num_voigts == 1:
+        shift = 3
+        v = 2
 
-            print("Warning, using only 1 Voigt is not sufficient when trying to fit Kalpha spectra")
-            shift=10
-            v = 1
-
-            params.add("amp0",value=arr[1][peakpos[0]],min=minamp,max=maxamp)
-            params.add("cen0",value=arr[0][peakpos[0]],min=arr[0][peakpos[0]]-shift,max=arr[0][peakpos[0]]+shift)
-            params.add("sigma0",value=1,min=0,max=1000)
-            params.add("gamma0",value=1,min=0,max=1000)
-
-        elif num_voigts >= 2:
-
-            shift = 3
-            v = 2
-
-            params.add("amp0",value=arr[1][peakpos[0]],min=minamp,max=maxamp)
-            params.add("amp1",value=arr[1][peakpos[1]],min=minamp,max=maxamp)
-            params.add("cen0",value=arr[0][peakpos[0]],min=arr[0][peakpos[0]]-shift,max=arr[0][peakpos[0]]+shift)
-            params.add("cen1",value=arr[0][peakpos[1]],min=arr[0][peakpos[1]]-shift,max=arr[0][peakpos[1]]+shift)
-            params.add("sigma0",value=1,min=0,max=1000)
-            params.add("sigma1",value=1,min=0,max=1000)
-            params.add("gamma0",value=1,min=0,max=1000)
-            params.add("gamma1",value=1,min=0,max=1000)
+        params.add("amp0",value=arr[1][peakpos[0]],min=minamp,max=maxamp)
+        params.add("amp1",value=arr[1][peakpos[1]],min=minamp,max=maxamp)
+        params.add("cen0",value=arr[0][peakpos[0]],min=arr[0][peakpos[0]]-shift,max=arr[0][peakpos[0]]+shift)
+        params.add("cen1",value=arr[0][peakpos[1]],min=arr[0][peakpos[1]]-shift,max=arr[0][peakpos[1]]+shift)
+        params.add("sigma0",value=1,min=0,max=1000)
+        params.add("sigma1",value=1,min=0,max=1000)
+        params.add("gamma0",value=1,min=0,max=1000)
+        params.add("gamma1",value=1,min=0,max=1000)
 
 
     if v < num_voigts:
@@ -406,7 +407,6 @@ def fit_Ka_with_voigts(arr, p0=None, num_voigts=2):
                              sigma=kwargs["sigma" + str(i)], gamma=kwargs["gamma" + str(i)])
         return spectra
 
-    print(params)
     result = Model(voigtmodel).fit(data=arr[1],x=arr[0],params=params)
 
     voigts = []
