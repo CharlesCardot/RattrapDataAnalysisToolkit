@@ -13,7 +13,7 @@ def all_runs_to_df(run_path):
     """
 
     alldata_files = [f.path for f in os.scandir(run_path)
-                     if "alldata" in str(f.path)]
+                     if "alldata" in str(os.path.basename(f.path))]
 
     for key, line in enumerate(open(alldata_files[0]).readlines()):
         if line.startswith("***"):
