@@ -26,7 +26,7 @@ def all_runs_to_df(run_path):
                            )
                         )
 
-    data = [pd.read_csv(x, delim_whitespace=True, skiprows=rows_to_skip)
+    data = [pd.read_csv(x, sep='\s+', skiprows=rows_to_skip)
             for x in alldata_files]
     return data
 
